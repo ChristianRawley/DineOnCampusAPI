@@ -4,7 +4,12 @@ const router = express.Router();
 const SITE_ID = "5ed1791f1ca48e085a7b9a4d";
 const LIONS_DEN_ID = "5f4936c257e0d8184670a220";
 
-const PERIODS = ["breakfast", "lunch", "dinner"];
+// Correct meal period IDs
+const PERIOD_IDS = {
+    breakfast: "6944ea653db2d23518c26d9d",
+    lunch: "6944ea653db2d23518c26d9f",
+    dinner: "6944ea653db2d23518c26d9e"
+};
 
 const FETCH_HEADERS = {
     Accept: "application/json, text/plain, */*",
@@ -12,13 +17,10 @@ const FETCH_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
     Origin: "https://dineoncampus.com",
     Referer: "https://dineoncampus.com/",
-    "X-Requested-With": "XMLHttpRequest",
-    "Sec-Fetch-Site": "cross-site",
-    "Sec-Fetch-Mode": "cors",
-    "Sec-Fetch-Dest": "empty"
+    "X-Requested-With": "XMLHttpRequest"
 };
 
-// Helper to fetch JSON from the API
+// Helper to fetch JSON
 async function fetchJson(url) {
     const res = await fetch(url, { headers: FETCH_HEADERS });
     const text = await res.text();
@@ -40,7 +42,7 @@ function simplifyMenu(menu) {
 
 router.get("/", async (_req, res) => {
     try {
-        const date = "2025-11-26"; // new Date().toISOString().split("T")[0];
+        const date = "2025-11-26";
 
         // Fetch all locations
         const siteData = await fetchJson(
@@ -52,31 +54,37 @@ router.get("/", async (_req, res) => {
             ...siteData.standaloneLocations
         ];
 
-        // Map over locations to fetch menu only for The Lion's Den
         const locationsWithMenus = await Promise.all(
             allLocations.map(async (loc) => {
+                const statusMessage = loc.status?.message || "Unknown";
+
                 if (loc.id === LIONS_DEN_ID) {
-                    const meals = {};
-                    for (const period of PERIODS) {
-                        const menuData = await fetchJson(
-                            `https://apiv4.dineoncampus.com/locations/${loc.id}/menu?date=${date}&period=${period}`
-                        );
-                        meals[period] = simplifyMenu(menuData);
-                    }
+                    // Fetch menus for The Lion's Den in parallel
+                    const mealsEntries = await Promise.all(
+                        Object.entries(PERIOD_IDS).map(async ([meal, periodId]) => {
+                            const menuData = await fetchJson(
+                                `https://apiv4.dineoncampus.com/locations/${loc.id}/menu?date=${date}&period=${periodId}`
+                            );
+                            return [meal, simplifyMenu(menuData)];
+                        })
+                    );
+
+                    const meals = Object.fromEntries(mealsEntries);
+
                     return {
                         id: loc.id,
                         name: loc.name,
                         building: loc.buildingName,
-                        isOpen: loc.status?.label === "open",
+                        statusMessage,
                         meals
                     };
                 } else {
-                    // Other locations: only basic info
+                    // Other locations: just basic info
                     return {
                         id: loc.id,
                         name: loc.name,
                         building: loc.buildingName,
-                        isOpen: loc.status?.label === "open"
+                        statusMessage
                     };
                 }
             })
