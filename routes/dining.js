@@ -2,13 +2,8 @@ import express from "express";
 const router = express.Router();
 
 const SITE_ID = "5ed1791f1ca48e085a7b9a4d";
-const LOCATION_ID = "5f4936c257e0d8184670a220";
 
-const PERIODS = {
-    breakfast: "693d55d4b4e411d4d52f13d1",
-    lunch: "693d55d4b4e411d4d52f13d3",
-    dinner: "693d55d4b4e411d4d52f13d2",
-};
+const PERIODS = ["breakfast", "lunch", "dinner"];
 
 const FETCH_HEADERS = {
     Accept: "application/json, text/plain, */*",
@@ -42,27 +37,37 @@ function simplifyMenu(menu) {
 
 router.get("/", async (_req, res) => {
     try {
-        const date = "2025-11-26"; //new Date().toISOString().split("T")[0];
-        const statusData = await fetchJson(`https://apiv4.dineoncampus.com/locations/status_by_site?siteId=${SITE_ID}`);
-        const location = statusData?.locations?.find(loc => loc.id === LOCATION_ID);
+        const date = "2025-11-26"; // new Date().toISOString().split("T")[0];
+        // Fetch all locations for the site
+        const siteData = await fetchJson(`https://apiv4.dineoncampus.com/sites/${SITE_ID}/locations-public?for_menus=true`);
 
-        const meals = Object.fromEntries(
-            await Promise.all(
-                Object.entries(PERIODS).map(async ([meal, periodId]) => {
-                    const menu = await fetchJson(`https://apiv4.dineoncampus.com/locations/${LOCATION_ID}/menu?date=${date}&period=${periodId}`);
-                    return [meal, simplifyMenu(menu)];
-                })
-            )
+        // Flatten locations from buildings + standalone
+        const allLocations = [
+            ...siteData.buildings.flatMap(b => b.locations),
+            ...siteData.standaloneLocations
+        ];
+
+        // Fetch menus for each location and each period
+        const locationsWithMenus = await Promise.all(
+            allLocations.map(async (loc) => {
+                const meals = {};
+                for (const period of PERIODS) {
+                    const menuData = await fetchJson(`https://apiv4.dineoncampus.com/locations/${loc.id}/menu?date=${date}&period=${period}`);
+                    meals[period] = simplifyMenu(menuData);
+                }
+                return {
+                    id: loc.id,
+                    name: loc.name,
+                    building: loc.buildingName,
+                    isOpen: loc.status?.label === "open",
+                    meals
+                };
+            })
         );
 
         res.json({
             date,
-            location: {
-                id: LOCATION_ID,
-                name: location?.name || "Dining Hall",
-                isOpen: location?.isOpen ?? false
-            },
-            meals
+            locations: locationsWithMenus
         });
     } catch (err) {
         console.error("Dining API error:", err);
