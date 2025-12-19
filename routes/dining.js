@@ -4,13 +4,6 @@ const router = express.Router();
 const SITE_ID = "5ed1791f1ca48e085a7b9a4d";
 const LIONS_DEN_ID = "5f4936c257e0d8184670a220";
 
-// Correct meal period IDs
-const PERIOD_IDS = {
-    breakfast: "6944ea653db2d23518c26d9d",
-    lunch: "6944ea653db2d23518c26d9f",
-    dinner: "6944ea653db2d23518c26d9e"
-};
-
 const FETCH_HEADERS = {
     Accept: "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
@@ -42,7 +35,7 @@ function simplifyMenu(menu) {
 
 router.get("/", async (_req, res) => {
     try {
-        const date = "2025-11-26";
+        const date = "2025-11-26"; // new Date().toISOString().split("T")[0];
 
         // Fetch locations with status
         const statusData = await fetchJson(
@@ -56,13 +49,23 @@ router.get("/", async (_req, res) => {
                 const statusMessage = loc.status?.message || "Unknown";
 
                 if (loc.id === LIONS_DEN_ID) {
-                    // Fetch menus for The Lion's Den in parallel
+                    // Fetch period IDs for the date
+                    const periodsData = await fetchJson(
+                        `https://apiv4.dineoncampus.com/locations/${loc.id}/periods/?date=${date}`
+                    );
+
+                    const periodMap = {};
+                    periodsData.periods.forEach(period => {
+                        periodMap[period.slug] = period.id;
+                    });
+
+                    // Fetch menus dynamically using period IDs
                     const mealsEntries = await Promise.all(
-                        Object.entries(PERIOD_IDS).map(async ([meal, periodId]) => {
+                        Object.entries(periodMap).map(async ([mealSlug, periodId]) => {
                             const menuData = await fetchJson(
                                 `https://apiv4.dineoncampus.com/locations/${loc.id}/menu?date=${date}&period=${periodId}`
                             );
-                            return [meal, simplifyMenu(menuData)];
+                            return [mealSlug, simplifyMenu(menuData)];
                         })
                     );
 
@@ -76,7 +79,6 @@ router.get("/", async (_req, res) => {
                         meals
                     };
                 } else {
-                    // Other locations: only basic info
                     return {
                         id: loc.id,
                         name: loc.name,
