@@ -44,15 +44,12 @@ router.get("/", async (_req, res) => {
     try {
         const date = "2025-11-26";
 
-        // Fetch all locations
-        const siteData = await fetchJson(
-            `https://apiv4.dineoncampus.com/sites/${SITE_ID}/locations-public?for_menus=true`
+        // Fetch locations with status
+        const statusData = await fetchJson(
+            `https://apiv4.dineoncampus.com/locations/status_by_site?siteId=${SITE_ID}`
         );
 
-        const allLocations = [
-            ...siteData.buildings.flatMap(b => b.locations),
-            ...siteData.standaloneLocations
-        ];
+        const allLocations = statusData.locations || [];
 
         const locationsWithMenus = await Promise.all(
             allLocations.map(async (loc) => {
@@ -79,7 +76,7 @@ router.get("/", async (_req, res) => {
                         meals
                     };
                 } else {
-                    // Other locations: just basic info
+                    // Other locations: only basic info
                     return {
                         id: loc.id,
                         name: loc.name,
