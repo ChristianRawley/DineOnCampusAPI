@@ -42,7 +42,7 @@ function simplifyMenu(menu) {
 
 router.get("/", async (_req, res) => {
     try {
-        const date = "2025-12-12"; //new Date().toISOString().split("T")[0];
+        const date = "2025-11-26"; //new Date().toISOString().split("T")[0];
         const statusData = await fetchJson(`https://apiv4.dineoncampus.com/locations/status_by_site?siteId=${SITE_ID}`);
         const location = statusData?.locations?.find(loc => loc.id === LOCATION_ID);
 
