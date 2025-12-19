@@ -35,7 +35,7 @@ function simplifyMenu(menu) {
 
 router.get("/", async (_req, res) => {
     try {
-        const date = "2025-11-26"; // new Date().toISOString().split("T")[0];
+        const date = new Date().toISOString().split("T")[0];
 
         // Fetch locations with status
         const statusData = await fetchJson(
