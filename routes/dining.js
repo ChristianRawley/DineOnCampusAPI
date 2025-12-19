@@ -2,6 +2,7 @@ import express from "express";
 const router = express.Router();
 
 const SITE_ID = "5ed1791f1ca48e085a7b9a4d";
+const LIONS_DEN_ID = "5f4936c257e0d8184670a220";
 
 const PERIODS = ["breakfast", "lunch", "dinner"];
 
@@ -17,12 +18,14 @@ const FETCH_HEADERS = {
     "Sec-Fetch-Dest": "empty"
 };
 
+// Helper to fetch JSON from the API
 async function fetchJson(url) {
     const res = await fetch(url, { headers: FETCH_HEADERS });
     const text = await res.text();
     return JSON.parse(text);
 }
 
+// Simplify menu items
 function simplifyMenu(menu) {
     if (!menu?.period?.categories) return [];
     return menu.period.categories.flatMap(({ items }) =>
@@ -38,30 +41,44 @@ function simplifyMenu(menu) {
 router.get("/", async (_req, res) => {
     try {
         const date = "2025-11-26"; // new Date().toISOString().split("T")[0];
-        // Fetch all locations for the site
-        const siteData = await fetchJson(`https://apiv4.dineoncampus.com/sites/${SITE_ID}/locations-public?for_menus=true`);
 
-        // Flatten locations from buildings + standalone
+        // Fetch all locations
+        const siteData = await fetchJson(
+            `https://apiv4.dineoncampus.com/sites/${SITE_ID}/locations-public?for_menus=true`
+        );
+
         const allLocations = [
             ...siteData.buildings.flatMap(b => b.locations),
             ...siteData.standaloneLocations
         ];
 
-        // Fetch menus for each location and each period
+        // Map over locations to fetch menu only for The Lion's Den
         const locationsWithMenus = await Promise.all(
             allLocations.map(async (loc) => {
-                const meals = {};
-                for (const period of PERIODS) {
-                    const menuData = await fetchJson(`https://apiv4.dineoncampus.com/locations/${loc.id}/menu?date=${date}&period=${period}`);
-                    meals[period] = simplifyMenu(menuData);
+                if (loc.id === LIONS_DEN_ID) {
+                    const meals = {};
+                    for (const period of PERIODS) {
+                        const menuData = await fetchJson(
+                            `https://apiv4.dineoncampus.com/locations/${loc.id}/menu?date=${date}&period=${period}`
+                        );
+                        meals[period] = simplifyMenu(menuData);
+                    }
+                    return {
+                        id: loc.id,
+                        name: loc.name,
+                        building: loc.buildingName,
+                        isOpen: loc.status?.label === "open",
+                        meals
+                    };
+                } else {
+                    // Other locations: only basic info
+                    return {
+                        id: loc.id,
+                        name: loc.name,
+                        building: loc.buildingName,
+                        isOpen: loc.status?.label === "open"
+                    };
                 }
-                return {
-                    id: loc.id,
-                    name: loc.name,
-                    building: loc.buildingName,
-                    isOpen: loc.status?.label === "open",
-                    meals
-                };
             })
         );
 
